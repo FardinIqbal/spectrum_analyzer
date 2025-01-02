@@ -738,24 +738,35 @@ def download_plots():
 def upload_mast():
     """
     Handle uploading a zipped MAST directory. Extracts the zip, finds all x1dints.fits files,
-    sorts them by observation time, processes them, and returns surface/heatmap plots.
-    **NEW**: Save each plot as an HTML file in a 'plots' folder.
+    sorts them by observation time, processes them, and returns surface/heatmap plots
+    *including custom bands* provided by the front end.
     """
+    global latest_surface_figure, latest_heatmap_figure
+
     try:
-        mast_file = request.files['mast_zip']
+        # 1. Get the MAST zip file
+        mast_file = request.files.get('mast_zip')
         if not mast_file or mast_file.filename == '':
             return jsonify({'error': 'No MAST zip file provided.'}), 400
 
-        # Create a temporary directory for extraction
+        # 2. Get custom bands JSON (array of { name, start, end }) from the form
+        custom_bands_json = request.form.get('custom_bands', '[]')
+        try:
+            custom_bands = json.loads(custom_bands_json)
+        except json.JSONDecodeError:
+            custom_bands = []
+        logger.info(f"Received custom bands for MAST: {custom_bands}")
+
+        # Create a temporary directory
         temp_dir = tempfile.mkdtemp()
         zip_path = os.path.join(temp_dir, 'mast.zip')
         mast_file.save(zip_path)
 
-        # Extract the uploaded zip file
+        # Extract the uploaded .zip
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_dir)
 
-        # Find all x1dints.fits files, ignoring __MACOSX directories and files starting with '._'
+        # Find all x1dints.fits files
         fits_files = []
         for root, dirs, files in os.walk(temp_dir):
             if '__MACOSX' in root:
@@ -770,7 +781,9 @@ def upload_mast():
 
         # Sort files by observation time
         try:
-            fits_files_sorted = sorted(fits_files, key=lambda x: load_and_process_fits(x)[2])
+            fits_files_sorted = sorted(
+                fits_files, key=lambda x: load_and_process_fits(x)[2]
+            )
         except TypeError:
             shutil.rmtree(temp_dir)
             return jsonify({'error': 'Error sorting FITS files by observation time.'}), 400
@@ -778,65 +791,66 @@ def upload_mast():
         # Process MAST files
         common_wavelength, interpolated_fluxes, all_times = process_mast_files(fits_files_sorted)
 
+        # Convert times to hours from earliest observation
         reference_time = min(all_times)
         times_hours = np.array([(t - reference_time).to('hour').value for t in all_times])
 
-        # Calculate variance and handle outliers
-        variance_flux = calculate_variance(interpolated_fluxes)
-        variance_cleaned = handle_variance_outliers(variance_flux, sigma=3, maxiters=3)
-        if np.all(np.isnan(variance_cleaned)):
-            variance_cleaned_filled = np.ones_like(variance_cleaned)
-        else:
-            median_variance = np.nanmedian(variance_cleaned)
-            variance_cleaned_filled = np.where(np.isnan(variance_cleaned), median_variance, variance_cleaned)
-        interpolated_variance = np.tile(variance_cleaned_filled, (len(times_hours), 1))
+        # Transpose flux to match shape (num_wavelengths, num_times)
+        flux_2d = interpolated_fluxes.T
+        wavelength_1d = common_wavelength
+        time_1d = times_hours
 
-        # Create surface plot (Normalized Flux)
-        surface_plot = go.Figure(
-            data=[go.Surface(z=interpolated_fluxes, x=common_wavelength, y=times_hours, colorscale='Viridis')]
-        )
-        surface_plot.update_layout(
-            title='3D Surface Plot (MAST Data)',
-            template='plotly_dark',
-            scene=dict(
-                xaxis_title='Wavelength (microns)',
-                yaxis_title='Time (hours since first observation)',
-                zaxis_title='Normalized Flux (%)',
-                xaxis=dict(showbackground=True, backgroundcolor='rgba(0,0,0,0.5)'),
-                yaxis=dict(showbackground=True, backgroundcolor='rgba(0,0,0,0.5)'),
-                zaxis=dict(showbackground=True, backgroundcolor='rgba(0,0,0,0.5)')
-            ),
-            autosize=True
+        # Create the plots using the same create_*_plot functions as the normal route
+        # Pass along the custom_bands so they can highlight these spectral regions
+        surface_plot = create_surface_plot(
+            flux=flux_2d,
+            wavelength=wavelength_1d,
+            time=time_1d,
+            title="3D Surface Plot (MAST Data)",
+            num_plots=1000,      # or read from a form field if desired
+            remove_first_60=True,
+            apply_binning=True,
+            smooth_sigma=2,
+            wavelength_unit='um',
+            custom_bands=custom_bands,  # <--- important
+            colorscale='Viridis'
         )
 
-        # Create heatmap plot (Variance)
-        heatmap_plot = go.Figure(
-            data=[go.Heatmap(z=interpolated_variance, x=common_wavelength, y=times_hours, colorscale='Viridis')]
-        )
-        heatmap_plot.update_layout(
-            title='Heatmap of Variance (MAST Data)',
-            template='plotly_dark',
-            xaxis_title='Wavelength (microns)',
-            yaxis_title='Time (hours since first observation)'
+        heatmap_plot = create_heatmap_plot(
+            flux=flux_2d,
+            wavelength=wavelength_1d,
+            time=time_1d,
+            title="Heatmap (MAST Data)",
+            num_plots=1000,
+            remove_first_60=True,
+            apply_binning=True,
+            smooth_sigma=2,
+            wavelength_unit='um',
+            custom_bands=custom_bands,  # <--- important
+            colorscale='Viridis'
         )
 
-        # ============ NEW CODE FOR SAVING PLOTS ============
+        # Store in global variables for /download_plots
+        latest_surface_figure = surface_plot
+        latest_heatmap_figure = heatmap_plot
+
+        # Save each plot as an HTML file if desired
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if not os.path.exists('plots'):
             os.makedirs('plots')
 
         surface_html_path = f'plots/mast_surface_plot_{timestamp}.html'
         heatmap_html_path = f'plots/mast_heatmap_plot_{timestamp}.html'
-
         surface_plot.write_html(surface_html_path)
         heatmap_plot.write_html(heatmap_html_path)
 
         logger.info(f"MAST Surface plot saved to {surface_html_path}")
         logger.info(f"MAST Heatmap plot saved to {heatmap_html_path}")
-        # ===================================================
 
+        # Clean up temp directory
         shutil.rmtree(temp_dir)
 
+        # Return figures as JSON
         return jsonify({
             'surface_plot': surface_plot.to_json(),
             'heatmap_plot': heatmap_plot.to_json()
@@ -845,6 +859,7 @@ def upload_mast():
     except Exception as e:
         logger.error(f"Error in upload_mast: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 400
+
 
 
 if __name__ == '__main__':

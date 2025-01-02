@@ -73,9 +73,9 @@ document.addEventListener('DOMContentLoaded', function() {
   // Initialize color scale selection
   initializeColorScales();
 
-  // Add preset custom bands for demonstration
-  addCustomBand('CH₄ Band', 2.14, 2.5);
-  addCustomBand('CO Band', 4.5, 5.05);
+  // Optionally add some default/preset bands:
+  addCustomBand('CH₄ Band', 2.14, 2.50);
+  addCustomBand('CO Band', 4.50, 5.05);
 });
 
 /**
@@ -243,7 +243,8 @@ async function generatePlots() {
 }
 
 /**
- * Process a zipped MAST folder by sending it to the `/upload_mast` endpoint.
+ * Process a zipped MAST folder by sending it to the `/upload_mast` endpoint,
+ * along with any custom bands from the UI.
  */
 async function uploadMastDirectory() {
   const mastZipFile = document.getElementById('mastZipFile').files[0];
@@ -254,6 +255,17 @@ async function uploadMastDirectory() {
 
   const formData = new FormData();
   formData.append('mast_zip', mastZipFile);
+
+  // Extract custom bands from the UI (exact same approach):
+  const customBands = Array.from(document.getElementById('customBands').children).map(band => {
+    const inputs = band.querySelectorAll('input');
+    return {
+      name:  inputs[0].value.trim(),
+      start: parseFloat(inputs[1].value),
+      end:   parseFloat(inputs[2].value)
+    };
+  }).filter(b => b.name && !isNaN(b.start) && !isNaN(b.end));
+  formData.append('custom_bands', JSON.stringify(customBands));
 
   try {
     const response = await fetch('/upload_mast', {
@@ -292,6 +304,7 @@ async function uploadMastDirectory() {
       'heatmap_plot_mast'
     );
 
+    // Scroll to where the plots are displayed
     document.getElementById('plotsContainer').scrollIntoView({ behavior: 'smooth' });
   } catch (error) {
     console.error('Error processing MAST folder:', error);
@@ -327,9 +340,9 @@ function resetPlotView(plotId) {
 }
 
 /**
- * (Optional) Track user interactions (camera/zoom) on each plot
- * so we can preserve them if needed. Currently, we just show
- * how one could update the layout if the user changes the camera.
+ * (Optional) Example of how you could track user interactions (camera/zoom) on each plot
+ * so you can preserve them if needed. Currently, we just show how one might update the layout
+ * if the user changes the camera or axis range.
  */
 document.getElementById('surfacePlot').on('plotly_relayout', function(eventData) {
   if (eventData['scene.camera']) {
