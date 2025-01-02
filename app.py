@@ -196,6 +196,12 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
         smooth_sigma, wavelength_unit
     )
 
+    # Adjust Z values for hover (divide by 10)
+    Z_adjusted = Z / 10
+
+    # Adjust X values for hover (divide by 24)
+    X_adjusted = X / 24
+
     hovertemplate = (
         'Time: %{x:.2f} hours<br>' +
         wavelength_label + ': %{y:.4f}<br>' +
@@ -205,7 +211,7 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Full spectrum surface
     surface_full = go.Surface(
-        x=X, y=Y, z=Z,
+        x=X_adjusted, y=Y, z=Z_adjusted,  # Use X_adjusted and Z_adjusted for hover values
         colorscale=colorscale,
         opacity=1,
         name='Full Spectrum',
@@ -224,7 +230,7 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Gray mask surface
     gray_surface = go.Surface(
-        x=X, y=Y, z=Z,
+        x=X_adjusted, y=Y, z=Z_adjusted,  # Use X_adjusted and Z_adjusted here as well
         colorscale=[[0, 'rgba(200, 200, 200, 0.3)'], [1, 'rgba(200, 200, 200, 0.3)']],
         opacity=0.3,
         showscale=False,
@@ -238,7 +244,7 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
         for band in custom_bands:
             band_mask = (Y >= band['start']) & (Y <= band['end'])
             band_surface = go.Surface(
-                x=X, y=Y, z=np.where(band_mask, Z, np.nan),
+                x=X_adjusted, y=Y, z=np.where(band_mask, Z_adjusted, np.nan),
                 colorscale=colorscale,
                 opacity=0.9,
                 showscale=False,
@@ -247,6 +253,10 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
                 hovertemplate=hovertemplate
             )
             data.append(band_surface)
+
+    # Update the x-axis tick values and labels
+    tickvals = np.linspace(X.min(), X.max(), num=6)  # Generate original tick positions
+    ticktext = [f"{val / 24:.2f}" for val in tickvals]  # Convert to divided values for labels
 
     layout = go.Layout(
         template="plotly_dark",
@@ -262,12 +272,30 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
             font=dict(size=18, color='#ffffff')
         ),
         scene=dict(
-            xaxis=dict(title='Time (hours)', gridcolor='#555555', linecolor='#555555', showbackground=True,
-                       backgroundcolor='rgba(0,0,0,0.5)'),
-            yaxis=dict(title=wavelength_label, gridcolor='#555555', linecolor='#555555', showbackground=True,
-                       backgroundcolor='rgba(0,0,0,0.5)'),
-            zaxis=dict(title='Variability %', gridcolor='#555555', linecolor='#555555', showbackground=True,
-                       backgroundcolor='rgba(0,0,0,0.5)'),
+            xaxis=dict(
+                title='Time (hours)',
+                gridcolor='#555555',
+                linecolor='#555555',
+                showbackground=True,
+                backgroundcolor='rgba(0,0,0,0.5)',
+                tickvals=tickvals,  # Use the original tick positions
+                ticktext=ticktext,  # Use the divided values for display
+                tickfont=dict(size=10, color='#ffffff')
+            ),
+            yaxis=dict(
+                title=wavelength_label,
+                gridcolor='#555555',
+                linecolor='#555555',
+                showbackground=True,
+                backgroundcolor='rgba(0,0,0,0.5)'
+            ),
+            zaxis=dict(
+                title='Variability %',
+                gridcolor='#555555',
+                linecolor='#555555',
+                showbackground=True,
+                backgroundcolor='rgba(0,0,0,0.5)'
+            ),
             aspectmode='manual',
             aspectratio=dict(x=1.4, y=1.2, z=0.8),
             camera=dict(eye=dict(x=1.5, y=1.5, z=1.3))
@@ -332,36 +360,13 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     fig = go.Figure(data=data, layout=layout)
 
-    # Update button styles consistently
-    fig.update_layout(
-        updatemenus=[
-            dict(
-                buttons=[
-                    dict(
-                        args=button['args'],
-                        label=button['label'],
-                        method=button['method'],
-                        visible=True,
-                    ) for button in menu['buttons']
-                ],
-                direction=menu['direction'],
-                showactive=True,
-                type=menu['type'],
-                x=menu['x'],
-                xanchor=menu['xanchor'],
-                y=menu['y'],
-                yanchor=menu['yanchor'],
-                pad={"r": 10, "t": 10},
-                bgcolor='rgba(30, 40, 70, 0.8)',
-                bordercolor='#ffffff',
-                font=dict(color='#ffffff'),
-                active=0,
-            ) for menu in updatemenus
-        ]
-    )
-
     return fig
 
+
+
+
+import numpy as np
+import plotly.graph_objects as go
 
 def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_60=True, apply_binning=True,
                         smooth_sigma=2, wavelength_unit='um', custom_bands=None, colorscale='Viridis'):
@@ -373,6 +378,12 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
         smooth_sigma, wavelength_unit
     )
 
+    # Adjust Z values for hover (divide by 10)
+    Z_adjusted = Z / 10
+
+    # Adjust X values for hover and axis (divide by 24)
+    x_adjusted = x / 24
+
     hovertemplate = (
         'Time: %{x:.2f} hours<br>' +
         wavelength_label + ': %{y:.4f}<br>' +
@@ -382,9 +393,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Full spectrum heatmap
     heatmap_full = go.Heatmap(
-        x=x,
+        x=x_adjusted,  # Use adjusted x values
         y=y,
-        z=Z,
+        z=Z_adjusted,  # Use adjusted z values
         colorscale=colorscale,
         colorbar=dict(
             title='Variability %',
@@ -402,9 +413,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Gray mask layer
     gray_heatmap = go.Heatmap(
-        x=x,
+        x=x_adjusted,  # Use adjusted x values
         y=y,
-        z=Z,
+        z=Z_adjusted,  # Use adjusted z values
         colorscale=[[0, 'black'], [1, 'white']],
         opacity=0.3,
         showscale=False,
@@ -418,11 +429,11 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
     if custom_bands:
         for band in custom_bands:
             band_mask = (y >= band['start']) & (y <= band['end'])
-            band_z = np.where(band_mask[:, None], Z, np.nan)
+            band_z = np.where(band_mask[:, None], Z_adjusted, np.nan)
             band_heatmap = go.Heatmap(
-                x=x,
+                x=x_adjusted,  # Use adjusted x values
                 y=y,
-                z=band_z,
+                z=band_z,  # Use adjusted z values for the band
                 colorscale=colorscale,
                 showscale=False,
                 hoverinfo='x+y+z',
@@ -444,8 +455,20 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             yanchor='top',
             font=dict(size=18, color='#ffffff')
         ),
-        xaxis=dict(title='Time (hours)', gridcolor='#555555', linecolor='#555555'),
-        yaxis=dict(title=wavelength_label, gridcolor='#555555', linecolor='#555555'),
+        xaxis=dict(
+            title='Time (hours)',
+            gridcolor='#555555',
+            linecolor='#555555',
+            tickvals=np.linspace(x.min() / 24, x.max() / 24, num=6),  # Adjust x ticks
+            ticktext=[f"{val:.2f}" for val in np.linspace(x.min() / 24, x.max() / 24, num=6)],
+            tickfont=dict(size=10, color='#ffffff')
+        ),
+        yaxis=dict(
+            title=wavelength_label,
+            gridcolor='#555555',
+            linecolor='#555555',
+            tickfont=dict(size=10, color='#ffffff')
+        ),
         margin=dict(l=50, r=50, t=80, b=180),
         autosize=True,
         hovermode='closest',
@@ -491,6 +514,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
     fig.update_xaxes(rangeslider_visible=True)
 
     return fig
+
 
 
 # ===================================
