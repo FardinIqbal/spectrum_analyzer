@@ -15,9 +15,39 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen p-8">
+
   <div class="max-w-6xl mx-auto bg-gray-800 rounded-xl shadow-md overflow-hidden">
     <div class="p-8">
       <h1 class="text-4xl font-bold mb-8 text-center text-blue-500">Spectrum Analyzer</h1>
+
+      <!-- ===============================
+           Preloaded Example Plots Section
+           =============================== -->
+      <div class="mb-12">
+        <h2 class="text-2xl font-semibold mb-4 text-blue-500">Preloaded Example Plots</h2>
+        <p class="text-gray-200 mb-6">
+          Below are two example plots that have already been generated.
+          You can view these first or upload your own data in the sections below.
+        </p>
+
+        <!-- Preloaded 3D Surface Plot -->
+        <div class="mb-8">
+          <h3 class="text-xl font-medium mb-2 text-blue-300">Preloaded 3D Surface Plot</h3>
+          <iframe
+            class="w-full h-[600px] bg-gray-700 rounded-lg shadow-lg"
+            src="{{ url_for('serve_plots', filename=preloaded_surface) }}">
+          </iframe>
+        </div>
+
+        <!-- Preloaded Heatmap Plot -->
+        <div>
+          <h3 class="text-xl font-medium mb-2 text-blue-300">Preloaded Heatmap</h3>
+          <iframe
+            class="w-full h-[600px] bg-gray-700 rounded-lg shadow-lg"
+            src="{{ url_for('serve_plots', filename=preloaded_heatmap) }}">
+          </iframe>
+        </div>
+      </div>
 
       <!-- ===============================
            Individual FITS Files Section

@@ -6,6 +6,8 @@
  *  - Functions to generate and reset Plotly plots
  *  - Functions to upload & process MAST directories
  *  - AUTO-DOWNLOAD of each plot's HTML upon rendering
+ *  - NEW: Hide the preloaded plots section once new
+ *    plots are generated or MAST data is processed.
  *******************************************************/
 
 /**
@@ -51,6 +53,17 @@ function newPlotAndDownload(plotId, data, layout, config, filename) {
     // Once rendering completes, auto-download the HTML
     autoDownloadPlotHTML(div, filename);
   });
+}
+
+/**
+ * Hide the preloaded plots section once the user generates new plots
+ * or processes a MAST folder.
+ */
+function hidePreloadedPlots() {
+  const preloadedSection = document.getElementById('preloadedPlotsSection');
+  if (preloadedSection) {
+    preloadedSection.style.display = 'none';
+  }
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -213,6 +226,9 @@ async function generatePlots() {
       throw new Error(data.error);
     }
 
+    // Hide preloaded plots (if any)
+    hidePreloadedPlots();
+
     // The returned JSON has "surface_plot" and "heatmap_plot" as Plotly.to_json() outputs
     const surfaceData = JSON.parse(data.surface_plot);
     const heatmapData = JSON.parse(data.heatmap_plot);
@@ -283,6 +299,9 @@ async function uploadMastDirectory() {
       throw new Error(data.error);
     }
 
+    // Hide preloaded plots (if any)
+    hidePreloadedPlots();
+
     // Same structure: "surface_plot" and "heatmap_plot" in JSON
     const surfaceData = JSON.parse(data.surface_plot);
     const heatmapData = JSON.parse(data.heatmap_plot);
@@ -340,9 +359,9 @@ function resetPlotView(plotId) {
 }
 
 /**
- * (Optional) Example of how you could track user interactions (camera/zoom) on each plot
- * so you can preserve them if needed. Currently, we just show how one might update the layout
- * if the user changes the camera or axis range.
+ * (Optional) Example: track user interactions (camera/zoom) on each plot
+ * so you can preserve them if needed. Currently, we just show how one might
+ * update the layout if the user changes the camera or axis range.
  */
 document.getElementById('surfacePlot').on('plotly_relayout', function(eventData) {
   if (eventData['scene.camera']) {

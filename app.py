@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, send_from_directory
 from astropy.io import fits
 import numpy as np
 import json
@@ -18,7 +18,7 @@ from astropy.stats import sigma_clip
 from scipy import interpolate
 import plotly.io as pio
 
-from datetime import datetime  # <-- NEW: for timestamping saved plot files.
+from datetime import datetime  # <-- for timestamping saved plot files.
 
 app = Flask(__name__)
 
@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 # Global Variables (for Download Feature)
 # ===================================
 """
-This example stores the last-generated Plotly figures in global variables (latest_surface_figure and latest_heatmap_figure).
-After the user uploads files and the plots are generated at /upload, they can immediately go to /download_plots to get the HTML.
-If multiple users use this service simultaneously, they’ll overwrite each other’s “latest” plots. 
-For multi-user or production scenarios, you’d want a more robust approach (e.g., a user session, a database, or some ID-based storage).
+Stores the last-generated Plotly figures in global variables (latest_surface_figure and latest_heatmap_figure).
+After the user uploads files and the plots are generated at /upload, they can go to /download_plots to get the HTML.
+If multiple users use the service simultaneously, they'll overwrite each other's "latest" plots.
+For multi-user or production scenarios, you'd want a more robust approach (session, DB, or ID-based storage).
 """
 latest_surface_figure = None
 latest_heatmap_figure = None
@@ -230,7 +230,7 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Gray mask surface
     gray_surface = go.Surface(
-        x=X_adjusted, y=Y, z=Z_adjusted,  # Use X_adjusted and Z_adjusted here as well
+        x=X_adjusted, y=Y, z=Z_adjusted,
         colorscale=[[0, 'rgba(200, 200, 200, 0.3)'], [1, 'rgba(200, 200, 200, 0.3)']],
         opacity=0.3,
         showscale=False,
@@ -278,8 +278,8 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
                 linecolor='#555555',
                 showbackground=True,
                 backgroundcolor='rgba(0,0,0,0.5)',
-                tickvals=tickvals,  # Use the original tick positions
-                ticktext=ticktext,  # Use the divided values for display
+                tickvals=tickvals,
+                ticktext=ticktext,
                 tickfont=dict(size=10, color='#ffffff')
             ),
             yaxis=dict(
@@ -359,10 +359,7 @@ def create_surface_plot(flux, wavelength, time, title, num_plots, remove_first_6
     layout.updatemenus = updatemenus
 
     fig = go.Figure(data=data, layout=layout)
-
     return fig
-
-
 
 
 import numpy as np
@@ -393,9 +390,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Full spectrum heatmap
     heatmap_full = go.Heatmap(
-        x=x_adjusted,  # Use adjusted x values
+        x=x_adjusted,
         y=y,
-        z=Z_adjusted,  # Use adjusted z values
+        z=Z_adjusted,
         colorscale=colorscale,
         colorbar=dict(
             title='Variability %',
@@ -413,9 +410,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     # Gray mask layer
     gray_heatmap = go.Heatmap(
-        x=x_adjusted,  # Use adjusted x values
+        x=x_adjusted,
         y=y,
-        z=Z_adjusted,  # Use adjusted z values
+        z=Z_adjusted,
         colorscale=[[0, 'black'], [1, 'white']],
         opacity=0.3,
         showscale=False,
@@ -431,9 +428,9 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             band_mask = (y >= band['start']) & (y <= band['end'])
             band_z = np.where(band_mask[:, None], Z_adjusted, np.nan)
             band_heatmap = go.Heatmap(
-                x=x_adjusted,  # Use adjusted x values
+                x=x_adjusted,
                 y=y,
-                z=band_z,  # Use adjusted z values for the band
+                z=band_z,
                 colorscale=colorscale,
                 showscale=False,
                 hoverinfo='x+y+z',
@@ -459,7 +456,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
             title='Time (hours)',
             gridcolor='#555555',
             linecolor='#555555',
-            tickvals=np.linspace(x.min() / 24, x.max() / 24, num=6),  # Adjust x ticks
+            tickvals=np.linspace(x.min() / 24, x.max() / 24, num=6),
             ticktext=[f"{val:.2f}" for val in np.linspace(x.min() / 24, x.max() / 24, num=6)],
             tickfont=dict(size=10, color='#ffffff')
         ),
@@ -512,9 +509,7 @@ def create_heatmap_plot(flux, wavelength, time, title, num_plots, remove_first_6
 
     fig = go.Figure(data=data, layout=layout)
     fig.update_xaxes(rangeslider_visible=True)
-
     return fig
-
 
 
 # ===================================
@@ -526,6 +521,7 @@ def sigma_clip_flux(interpolated_fluxes, sigma=3, maxiters=5):
     for flux in interpolated_fluxes:
         clipped_flux = sigma_clip(flux, sigma=sigma, maxiters=maxiters, cenfunc='median', stdfunc='mad_std')
         if np.all(clipped_flux.mask):
+            # If everything got masked, fallback to an array of ones
             flux_cleaned = np.ones_like(flux)
         else:
             median_flux = np.median(flux[~clipped_flux.mask])
@@ -601,10 +597,28 @@ def process_mast_files(file_paths):
 # ===================================
 # Routes
 # ===================================
+
+@app.route('/plots/<path:filename>')
+def serve_plots(filename):
+    """
+    Serve static Plotly HTML files directly from the 'plots' directory.
+    """
+    return send_from_directory('plots', filename)
+
 @app.route('/')
 def index():
-    """Render the main index page."""
-    return render_template('index.html')
+    """
+    Render the main index page.
+    NOTE: We'll pass two example preloaded plot filenames to the template so it can embed them as iframes.
+    """
+    # If you have specific "preloaded" HTML files you want to show by default, list them here:
+    preloaded_surface = "surface_plot_20250128_173435.html"
+    preloaded_heatmap = "heatmap_plot_20250128_173435.html"
+
+    # Render 'index.html', passing the filenames so you can use them in iframes or links
+    return render_template('index.html',
+                           preloaded_surface=preloaded_surface,
+                           preloaded_heatmap=preloaded_heatmap)
 
 
 @app.route('/upload', methods=['POST'])
@@ -613,7 +627,7 @@ def upload_files():
     Handle file uploads for flux, wavelength, and time FITS files.
     Generate and return the surface and heatmap plots as JSON.
     Also store the figures in global variables for download.
-    **NEW**: Save each plot as an HTML file in a 'plots' folder.
+    Save each plot as an HTML file in a 'plots' folder.
     """
     global latest_surface_figure, latest_heatmap_figure
 
@@ -686,7 +700,7 @@ def upload_files():
         latest_surface_figure = surface_plot
         latest_heatmap_figure = heatmap_plot
 
-        # ============ NEW CODE FOR SAVING PLOTS ============
+        # ============ SAVE PLOTS TO 'plots' FOLDER ============
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if not os.path.exists('plots'):
             os.makedirs('plots')
@@ -699,7 +713,7 @@ def upload_files():
 
         logger.info(f"Surface plot saved to {surface_html_path}")
         logger.info(f"Heatmap plot saved to {heatmap_html_path}")
-        # ===================================================
+        # ======================================================
 
         return jsonify({
             'surface_plot': surface_plot.to_json(),
@@ -824,8 +838,7 @@ def upload_mast():
         wavelength_1d = common_wavelength
         time_1d = times_hours
 
-        # Create the plots using the same create_*_plot functions as the normal route
-        # Pass along the custom_bands so they can highlight these spectral regions
+        # Create the plots using the same create_*_plot functions
         surface_plot = create_surface_plot(
             flux=flux_2d,
             wavelength=wavelength_1d,
@@ -836,7 +849,7 @@ def upload_mast():
             apply_binning=True,
             smooth_sigma=2,
             wavelength_unit='um',
-            custom_bands=custom_bands,  # <--- important
+            custom_bands=custom_bands,
             colorscale='Viridis'
         )
 
@@ -850,7 +863,7 @@ def upload_mast():
             apply_binning=True,
             smooth_sigma=2,
             wavelength_unit='um',
-            custom_bands=custom_bands,  # <--- important
+            custom_bands=custom_bands,
             colorscale='Viridis'
         )
 
@@ -858,7 +871,7 @@ def upload_mast():
         latest_surface_figure = surface_plot
         latest_heatmap_figure = heatmap_plot
 
-        # Save each plot as an HTML file if desired
+        # Save each plot as an HTML file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         if not os.path.exists('plots'):
             os.makedirs('plots')
@@ -883,7 +896,6 @@ def upload_mast():
     except Exception as e:
         logger.error(f"Error in upload_mast: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 400
-
 
 
 if __name__ == '__main__':
