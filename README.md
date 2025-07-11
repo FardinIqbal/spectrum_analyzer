@@ -83,31 +83,6 @@ spectrum_analyzer/
 
 5. Visit `http://localhost:5000` in your browser.
 
----
-
-## Heroku Deployment
-
-1. Log in to Heroku:
-
-   ```
-    heroku login
-   ```
-
-2. Connect your local repo to a Heroku app:
-
-   ```
-    heroku git:remote -a your-heroku-app-name
-   ```
-
-3. Deploy the app:
-
-   ```
-    git push heroku main
-   ```
-
-Ensure your root directory includes a valid `Procfile` and `runtime.txt`.
-
----
 
 ## FITS File Requirements
 
